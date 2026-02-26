@@ -208,7 +208,10 @@ export const initBolt = (log = true) => {
     const jsxBinSrc = `${extRoot}/jsx/index.jsxbin`;
     if (fs.existsSync(jsxSrc)) {
       if (log) console.log(jsxSrc);
-      evalFile(jsxSrc);
+      // Read file via Node.js and evalScript directly to avoid
+      // $.evalFile() path resolution issues with junctions/symlinks
+      const jsxContent = fs.readFileSync(jsxSrc, "utf-8");
+      csi.evalScript(jsxContent, () => {});
     } else if (fs.existsSync(jsxBinSrc)) {
       if (log) console.log(jsxBinSrc);
       evalFile(jsxBinSrc);

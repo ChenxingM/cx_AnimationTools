@@ -4,3 +4,21 @@ dist/
 *.log
 .env
 .env.local
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+Thumbs.db
+Desktop.ini
+
+# Claude Code
+.claude/
+
+# Lock files (keep one)
+yarn.lock
+
+# Build artifacts
+*.zxp
+*.zip
