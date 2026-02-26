@@ -27,9 +27,17 @@ function clampValue(label: string, value: number): number {
     if (v < 0) v += 360;
     return v;
   }
-  if (["サイズ", "距離", "スプレッド", "チョーク"].indexOf(label) !== -1) return Math.max(0, value);
+  if (["サイズ", "距離", "スプレッド", "チョーク"].indexOf(label) !== -1) return Math.max(0, Math.min(200, value));
   if (label.indexOf("深さ") !== -1) return Math.max(0, Math.min(1000, value));
-  return value;
+  return Math.max(0, Math.min(100, value));
+}
+
+function getRange(label: string): [number, number] {
+  if (label.indexOf("不透明度") !== -1) return [0, 100];
+  if (label === "角度") return [0, 359];
+  if (["サイズ", "距離", "スプレッド", "チョーク"].indexOf(label) !== -1) return [0, 200];
+  if (label.indexOf("深さ") !== -1) return [0, 1000];
+  return [0, 100];
 }
 
 function getSensitivity(label: string): number {
@@ -74,7 +82,7 @@ export function PropertyRow({ prop, propIndex, styleId, onRefresh }: PropertyRow
     [handleValueChange],
   );
 
-  // Scrub drag handling
+  // Scrub drag handling on number input
   const handleScrubDown = useCallback(
     (e: React.MouseEvent) => {
       const currentVal = typeof prop.value === "boolean" ? (prop.value ? 1 : 0) : (prop.value as number);
@@ -119,19 +127,46 @@ export function PropertyRow({ prop, propIndex, styleId, onRefresh }: PropertyRow
     [localVal, prop.type, handleValueChange],
   );
 
-  const handleUp = useCallback(() => {
-    const step = prop.type === "number" && prop.label === "角度" ? 5 : 1;
-    const currentVal = typeof prop.value === "boolean" ? (prop.value ? 1 : 0) : (prop.value as number);
-    const newVal = prop.type === "boolean" ? (currentVal + step !== 0) : currentVal + step;
-    handleValueChange(newVal);
-  }, [prop.value, prop.type, prop.label, handleValueChange]);
+  // Slider drag handling
+  const handleSliderDown = useCallback(
+    (e: React.MouseEvent<HTMLDivElement>) => {
+      const track = e.currentTarget;
+      const [min, max] = getRange(prop.label);
 
-  const handleDown = useCallback(() => {
-    const step = prop.type === "number" && prop.label === "角度" ? 5 : 1;
-    const currentVal = typeof prop.value === "boolean" ? (prop.value ? 1 : 0) : (prop.value as number);
-    const newVal = prop.type === "boolean" ? (currentVal - step !== 0) : currentVal - step;
-    handleValueChange(newVal);
-  }, [prop.value, prop.type, prop.label, handleValueChange]);
+      const calcValue = (clientX: number) => {
+        const rect = track.getBoundingClientRect();
+        let pct = (clientX - rect.left) / rect.width;
+        pct = Math.max(0, Math.min(1, pct));
+        return Math.round(min + pct * (max - min));
+      };
+
+      // Immediate value on click
+      let newVal = calcValue(e.clientX);
+      newVal = clampValue(prop.label, newVal);
+      setLocalVal(String(newVal));
+      const applyImmediate = prop.type === "boolean" ? newVal !== 0 : newVal;
+      evalTS("setPropertyValue", styleId, propIndex, applyImmediate);
+
+      const onMove = (ev: MouseEvent) => {
+        let v = calcValue(ev.clientX);
+        v = clampValue(prop.label, v);
+        setLocalVal(String(v));
+        const applyVal = prop.type === "boolean" ? v !== 0 : v;
+        evalTS("setPropertyValue", styleId, propIndex, applyVal);
+      };
+
+      const onUp = () => {
+        setLocalVal(null);
+        onRefresh();
+        document.removeEventListener("mousemove", onMove);
+        document.removeEventListener("mouseup", onUp);
+      };
+
+      document.addEventListener("mousemove", onMove);
+      document.addEventListener("mouseup", onUp);
+    },
+    [prop.label, prop.type, styleId, propIndex, onRefresh],
+  );
 
   // Render value control
   let valueControl: React.ReactNode;
@@ -160,7 +195,7 @@ export function PropertyRow({ prop, propIndex, styleId, onRefresh }: PropertyRow
       </select>
     );
   } else {
-    // number or boolean
+    // number or boolean — slider + number input
     const displayVal =
       localVal ??
       (prop.type === "boolean"
@@ -168,6 +203,10 @@ export function PropertyRow({ prop, propIndex, styleId, onRefresh }: PropertyRow
           ? "1"
           : "0"
         : String(prop.value));
+    const numericVal = parseFloat(displayVal) || 0;
+    const [min, max] = getRange(prop.label);
+    const percent = Math.max(0, Math.min(100, ((numericVal - min) / (max - min)) * 100));
+
     valueControl = (
       <div className="number-control">
         <input
@@ -182,13 +221,8 @@ export function PropertyRow({ prop, propIndex, styleId, onRefresh }: PropertyRow
           onKeyDown={handleInputCommit}
           onMouseDown={handleScrubDown}
         />
-        <div className="number-arrows">
-          <button className="arrow-btn" onClick={handleUp}>
-            ▲
-          </button>
-          <button className="arrow-btn" onClick={handleDown}>
-            ▼
-          </button>
+        <div className="slider-track" onMouseDown={handleSliderDown}>
+          <div className="slider-fill" style={{ width: `${percent}%` }} />
         </div>
       </div>
     );

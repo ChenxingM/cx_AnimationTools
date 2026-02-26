@@ -71,6 +71,41 @@ export function PropertyPanel({
     [fillOpacity, onRefresh],
   );
 
+  const handleFillSliderDown = useCallback(
+    (e: React.MouseEvent<HTMLDivElement>) => {
+      if (fillOpacity === null) return;
+      const track = e.currentTarget;
+
+      const calcValue = (clientX: number) => {
+        const rect = track.getBoundingClientRect();
+        let pct = (clientX - rect.left) / rect.width;
+        pct = Math.max(0, Math.min(1, pct));
+        return Math.round(pct * 100);
+      };
+
+      let newVal = calcValue(e.clientX);
+      setLocalFill(String(newVal));
+      evalTS("setFillOpacity", newVal);
+
+      const onMove = (ev: MouseEvent) => {
+        let v = calcValue(ev.clientX);
+        setLocalFill(String(v));
+        evalTS("setFillOpacity", v);
+      };
+
+      const onUp = () => {
+        setLocalFill(null);
+        onRefresh();
+        document.removeEventListener("mousemove", onMove);
+        document.removeEventListener("mouseup", onUp);
+      };
+
+      document.addEventListener("mousemove", onMove);
+      document.addEventListener("mouseup", onUp);
+    },
+    [fillOpacity, onRefresh],
+  );
+
   const handleFillCommit = useCallback(
     (e: React.FocusEvent<HTMLInputElement> | React.KeyboardEvent<HTMLInputElement>) => {
       if ("key" in e && e.key !== "Enter") return;
@@ -98,13 +133,11 @@ export function PropertyPanel({
                 onKeyDown={handleFillCommit}
                 onMouseDown={handleFillScrubDown}
               />
-              <div className="number-arrows">
-                <button className="arrow-btn" onClick={() => handleFillChange(Math.min(100, fillOpacity + 1))}>
-                  ▲
-                </button>
-                <button className="arrow-btn" onClick={() => handleFillChange(Math.max(0, fillOpacity - 1))}>
-                  ▼
-                </button>
+              <div className="slider-track" onMouseDown={handleFillSliderDown}>
+                <div
+                  className="slider-fill"
+                  style={{ width: `${Math.max(0, Math.min(100, parseFloat(localFill ?? String(fillOpacity)) || 0))}%` }}
+                />
               </div>
             </div>
           </div>
